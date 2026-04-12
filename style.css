@@ -56,7 +56,7 @@ header {
 /* SCREENS */
 .screen {
     flex: 1; display: flex; flex-direction: column; justify-content: center;
-    opacity: 0; pointer-events: none; position: absolute; top: 5rem; left: 2rem; right: 2rem; bottom: 2rem;
+    opacity: 0; pointer-events: none; position: absolute; top: 6.5rem; left: 2rem; right: 2rem; bottom: 2rem;
     transition: opacity var(--transition), transform var(--transition); transform: translateY(10px);
 }
 .screen.active { opacity: 1; pointer-events: all; transform: translateY(0); z-index: 5; }
@@ -121,7 +121,7 @@ input[type=range]::-webkit-slider-runnable-track { width: 100%; height: 4px; cur
 .score-display { font-weight: 700; letter-spacing: -0.05em; margin-top: 0.5rem; }
 .comparison-row { display: flex; gap: 1rem; width: 100%; }
 .color-box-container { flex: 1; display: flex; flex-direction: column; align-items: center; gap: 0.5rem; background: var(--surface); padding: 1.5rem; border-radius: var(--radius-lg); border: 1px solid var(--border); }
-.color-box-label { font-size: 0.85rem; color: var(--text-muted); font-weight: 500; text-transform: uppercase; letter-spacing: 1px; }
+.color-box-label { font-size: 0.75rem; color: var(--text-muted); font-weight: 600; text-transform: uppercase; letter-spacing: 0.5px; white-space: nowrap; }
 
 /* OVERLAYS & MODALS */
 .overlay { position: fixed; top: 0; left: 0; right: 0; bottom: 0; background: rgba(5,5,5,0.9); z-index: 100; display: flex; flex-direction: column; justify-content: center; align-items: center; opacity: 1; transition: opacity 0.3s; backdrop-filter: blur(5px); }
@@ -139,6 +139,20 @@ input[type=range]::-webkit-slider-runnable-track { width: 100%; height: 4px; cur
 .notification { position: fixed; top: 20px; left: 50%; transform: translateX(-50%) translateY(-20px); background: var(--primary); color: var(--primary-invert); padding: 0.8rem 1.5rem; border-radius: 100px; font-weight: 600; font-size: 0.95rem; z-index: 1000; opacity: 0; pointer-events: none; transition: opacity 0.3s, transform 0.3s cubic-bezier(0.16, 1, 0.3, 1); box-shadow: 0 10px 30px rgba(0,0,0,0.2); }
 .notification:not(.hidden) { opacity: 1; transform: translateX(-50%) translateY(0); }
 
+/* LEADERBOARD & LOBBY LISTS */
+.lobby-player-pill { background: var(--surface-hover); border: 1px solid var(--border); padding: 0.4rem 1rem; border-radius: 100px; font-weight: 500; font-size: 0.9rem; }
+.leaderboard-item { display: flex; align-items: center; background: var(--surface); padding: 1rem; border-radius: var(--radius-md); border: 1px solid var(--border); transition: transform 0.2s; }
+.leaderboard-item.is-me { border-color: var(--accent); background: rgba(59, 130, 246, 0.1); }
+.leaderboard-item .rank { font-size: 1.5rem; font-weight: 800; color: var(--text-muted); width: 40px; text-align: center; }
+.leaderboard-item:nth-child(1) .rank { color: #fbbf24; } /* Gold */
+.leaderboard-item:nth-child(2) .rank { color: #9ca3af; } /* Silver */
+.leaderboard-item:nth-child(3) .rank { color: #b45309; } /* Bronze */
+.leaderboard-item .player-info { flex: 1; padding-left: 1rem; }
+.leaderboard-item .name { font-weight: 700; font-size: 1.1rem; color: var(--text-primary); }
+.leaderboard-item .round-acc { font-size: 0.85rem; color: var(--win); margin-top: 0.2rem; }
+.leaderboard-item .score { font-size: 1.5rem; font-weight: 800; color: var(--primary); font-family: monospace; }
+.leaderboard-item .score-label { font-size: 0.7rem; color: var(--text-muted); text-transform: uppercase; display: block; text-align: right; }
+
 /* Helpers */
 .hidden { display: none !important; }
 
@@ -154,8 +168,11 @@ input[type=range]::-webkit-slider-runnable-track { width: 100%; height: 4px; cur
 
 @media (max-width: 480px) {
     #app { padding: 1.5rem; }
-    .screen { top: 4rem; left: 1.5rem; right: 1.5rem; bottom: 1.5rem; }
+    .screen { top: 6rem; left: 1.5rem; right: 1.5rem; bottom: 1.5rem; }
     h1 { font-size: 2rem; }
     .room-code-box { font-size: 2.5rem; }
     .actions.split { flex-direction: column; }
+    .color-box-container { padding: 1rem; }
+    .stat-label { font-size: 0.75rem; }
+    .stat-value { font-size: 1rem; }
 }
