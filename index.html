@@ -21,6 +21,10 @@
                  <span style="opacity:0.5; margin:0 5px;">|</span>
                  Rakip: <span id="score-opponent" class="highlight">0</span>
             </div>
+            <!-- NEW VISUAL TIMER -->
+            <div id="guess-timer-display" class="hidden" style="font-family: monospace; font-size: 1.1rem; color: var(--text-muted); font-weight: 500; letter-spacing: 1px; transition: color 0.3s; padding: 0.4rem 1rem; border-radius: 100px; background: var(--surface); border: 1px solid var(--border);">
+                00:20
+            </div>
         </header>
 
         <!-- SCREEN 1: HOME -->
@@ -40,6 +44,11 @@
                         <button id="btn-join-room" class="btn secondary" style="width: auto;">Katıl</button>
                     </div>
                 </div>
+            </div>
+            
+            <!-- FOOTER -->
+            <div style="position: absolute; bottom: 0; left: 0; right: 0; text-align: center; padding-bottom: 0.5rem; font-size: 0.8rem; color: var(--text-muted); opacity: 0.6;">
+                &copy; 2026 Yiğit Taşçı - Tüm Hakları Saklıdır.
             </div>
         </div>
 
@@ -69,6 +78,7 @@
                         <select id="game-mode-select" style="background:var(--bg-color); color:var(--text-primary); border:1px solid var(--border); padding:0.5rem; border-radius:var(--radius-sm); outline:none;">
                             <option value="classic">Klasik (Tur Kazananı Puan Alır)</option>
                             <option value="cumulative">Kümülatif (En Yüksek Yüzdeyi Toplar)</option>
+                            <option value="speedKahoot">Hızlı Kahoot (Yüzde + Zaman Bonusu)</option>
                         </select>
                     </div>
 

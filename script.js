@@ -19,7 +19,9 @@ let gameState = {
 let localGuess = { h: 180, s: 50, l: 50 };
 let gameTimer = null;
 let resultTimer = null;
-let roundTimeoutTimer = null; // for the 20 sec Kahoot timer
+let roundTimeoutTimer = null; // Backend Kahoot timer array
+let guessVisTimer = null; // Visual ticking timer
+window.currentGuessTimeLeft = 20; // Global reference for fast guess bonus
 
 // DOM Elements
 const screens = {
@@ -372,7 +374,9 @@ function handleGuestData(data) {
         gameState.scoreLimit = data.payload.limit;
         renderLobbyPlayers();
         // Update Read-only settings
-        const mTranslate = gameState.gameMode === 'classic' ? 'Klasik (Puanlı)' : 'Kümülatif (Yüzde Toplama)';
+        let mTranslate = gameState.gameMode === 'classic' ? 'Klasik (Puanlı)' : 'Kümülatif (Yüzde Toplama)';
+        if(gameState.gameMode === 'speedKahoot') mTranslate = 'Hızlı Kahoot (Yüzde + Zaman Bonusu)';
+        
         elems.lobbyStatus.innerHTML = `<div>Host ayarları güncelledi.</div><div style="margin-top:0.5rem; font-size:0.9rem; color:var(--text-muted);"><b style="color:#fff;">Oyun Modu:</b> ${mTranslate}<br/><b style="color:#fff;">Hedef:</b> ${data.payload.scoreLimit}</div>`;
     }
     else if (data.type === 'START_ROUND') {
@@ -456,6 +460,7 @@ function handleStartRoundPhase(payload) {
     updateGuessPreview();
 
     // Show color
+    document.getElementById('guess-timer-display').classList.add('hidden');
     elems.targetDisplay.style.backgroundColor = `hsl(${gameState.targetColor.h}, ${gameState.targetColor.s}%, ${gameState.targetColor.l}%)`;
     switchScreen('color');
 
@@ -473,6 +478,11 @@ function handleStartRoundPhase(payload) {
             clearInterval(gameTimer);
             switchScreen('guess');
             
+            // Start local visual timer (only in multiplayer)
+            if (gameState.isMultiplayer) {
+                startVisualGuessTimer();
+            }
+            
             // Timeout safety layer for multiplayer (20 seconds) Kahoot timer
             if (isHost && gameState.isMultiplayer) {
                 clearTimeout(roundTimeoutTimer);
@@ -484,8 +494,35 @@ function handleStartRoundPhase(payload) {
     }, 1000);
 }
 
+function startVisualGuessTimer() {
+    const dObj = document.getElementById('guess-timer-display');
+    dObj.classList.remove('hidden');
+    dObj.style.color = "var(--text-muted)";
+    
+    window.currentGuessTimeLeft = 20;
+    dObj.innerText = `00:${window.currentGuessTimeLeft}`;
+    
+    clearInterval(guessVisTimer);
+    guessVisTimer = setInterval(() => {
+        window.currentGuessTimeLeft--;
+        if (window.currentGuessTimeLeft >= 0) {
+            dObj.innerText = `00:${window.currentGuessTimeLeft < 10 ? '0'+window.currentGuessTimeLeft : window.currentGuessTimeLeft}`;
+            if (window.currentGuessTimeLeft <= 5) {
+                dObj.style.color = "var(--lose)";
+            }
+        } else {
+            clearInterval(guessVisTimer);
+            dObj.innerText = `00:00`;
+        }
+    }, 1000);
+}
+
 function submitGuess() {
     const accuracy = calculateAccuracy(localGuess, gameState.targetColor);
+    
+    // speedKahoot time bonus calculation
+    const timeBonus = Math.floor(window.currentGuessTimeLeft / 2);
+    const finalScore = gameState.gameMode === 'speedKahoot' ? (accuracy + timeBonus) : accuracy;
     
     if (!gameState.isMultiplayer) {
         handleSoloResult(accuracy);
@@ -494,11 +531,15 @@ function submitGuess() {
 
     // Multiplayer Logic
     if (isHost) {
-        gameState.players[myPeerId].currentAcc = accuracy;
+        gameState.players[myPeerId].currentAcc = finalScore;
+        clearInterval(guessVisTimer);
+        document.getElementById('guess-timer-display').innerText = "Bekleniyor...";
         checkRoundReady(false);
         showOverlay("Diğer oyuncuların tahmini bekleniyor...");
     } else {
-        connections['host'].send({ type: 'GUEST_GUESS', payload: { score: accuracy } });
+        connections['host'].send({ type: 'GUEST_GUESS', payload: { score: finalScore } });
+        clearInterval(guessVisTimer);
+        document.getElementById('guess-timer-display').innerText = "Bekleniyor...";
         showOverlay("Diğer oyuncular bekleniyor...");
     }
 }
@@ -540,7 +581,7 @@ function checkRoundReady(forceComplete = false) {
             if(rankedArray.some(p => gameState.players[p.id].score >= gameState.scoreLimit)) matchOver = true;
             
         } else {
-            // cumulative
+            // cumulative and speedKahoot
             rankedArray.forEach(p => {
                 gameState.players[p.id].score += p.acc;
             });
@@ -570,9 +611,11 @@ function checkRoundReady(forceComplete = false) {
         };
 
         if (matchOver) {
+            clearInterval(guessVisTimer);
             if(gameState.isMultiplayer) Object.values(connections).forEach(c => c.open && c.send({ type: 'MATCH_RESULT', payload }));
             handleMatchResult(payload);
         } else {
+            clearInterval(guessVisTimer);
             if(gameState.isMultiplayer) Object.values(connections).forEach(c => c.open && c.send({ type: 'ROUND_RESULT', payload }));
             handleRoundResult(payload);
         }
