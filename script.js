@@ -534,13 +534,13 @@ function submitGuess() {
         gameState.players[myPeerId].currentAcc = finalScore;
         clearInterval(guessVisTimer);
         document.getElementById('guess-timer-display').innerText = "Bekleniyor...";
-        checkRoundReady(false);
         showOverlay("Diğer oyuncuların tahmini bekleniyor...");
+        checkRoundReady(false);
     } else {
-        connections['host'].send({ type: 'GUEST_GUESS', payload: { score: finalScore } });
         clearInterval(guessVisTimer);
         document.getElementById('guess-timer-display').innerText = "Bekleniyor...";
         showOverlay("Diğer oyuncular bekleniyor...");
+        connections['host'].send({ type: 'GUEST_GUESS', payload: { score: finalScore } });
     }
 }
 
