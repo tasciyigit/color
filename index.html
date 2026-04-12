@@ -1,0 +1,233 @@
+<!DOCTYPE html>
+<html lang="tr">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>Color Memory | Hafıza Oyunu</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="style.css?v=2024">
+    <!-- PeerJS for WebRTC P2P multiplayer -->
+    <script src="https://unpkg.com/peerjs@1.5.2/dist/peerjs.min.js"></script>
+</head>
+<body>
+    <div id="app">
+        <!-- HEADER -->
+        <header>
+            <div id="logo" class="logo">color</div>
+            <div id="live-scoreboard" class="scoreboard hidden">
+                 Sen: <span id="score-self" class="highlight">0</span> 
+                 <span style="opacity:0.5; margin:0 5px;">|</span>
+                 Rakip: <span id="score-opponent" class="highlight">0</span>
+            </div>
+        </header>
+
+        <!-- SCREEN 1: HOME -->
+        <div id="home-screen" class="screen active">
+            <div class="hero">
+                <h1>İnsanlar renkleri pek de iyi hatırlayamaz.</h1>
+                <p>Sana bir renk göstereceğiz, ardından onu hafızandan yeniden oluşturmaya çalışacaksın.</p>
+                <div class="actions">
+                    <button id="btn-solo" class="btn primary">Solo Çılgınlık</button>
+                    
+                    <div class="divider">veya Arkadaşınla Kapış</div>
+                    
+                    <button id="btn-multi-create" class="btn secondary outline">Yeni Oda Oluştur</button>
+                    
+                    <div class="join-room-container">
+                        <input type="text" id="join-room-input" placeholder="Oda Kodu" maxlength="4">
+                        <button id="btn-join-room" class="btn secondary" style="width: auto;">Katıl</button>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- SCREEN 1.5: LOBBY -->
+        <div id="lobby-screen" class="screen">
+            <div class="hero text-center">
+                <h2 style="margin-bottom: 0.5rem;">Oda Kodu</h2>
+                <div class="room-code-box" id="lobby-code-display">A1B2</div>
+                
+                <p id="lobby-status" style="margin-top: 1rem; color: var(--accent);">Arkadaşının koda girmesi bekleniyor...</p>
+                <div style="font-size: 0.8rem; color: var(--text-muted); opacity: 0.8; margin-top: 0.5rem; background: rgba(255,0,0,0.1); padding: 0.4rem; border-radius: var(--radius-sm); display: inline-block;">
+                    Geri sayım bitene veya arkadaşın bağlanana kadar lütfen sayfayı <b>YENİLEMEYİN</b>, yoksa bağlantı kopar!
+                </div>
+                
+                <div id="host-controls" class="controls-card hidden" style="margin-top: 2rem;">
+                    <h3>Maç Ayarları</h3>
+                    <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom: 1rem;">
+                        <label>Kazanma Puanı:</label>
+                        <input type="number" id="target-score-input" value="3" min="1" max="10" class="num-input">
+                    </div>
+                    <button id="btn-start-match" class="btn primary full-width">Maçı Başlat!</button>
+                </div>
+            </div>
+        </div>
+
+        <!-- SCREEN 2: SHOW COLOR -->
+        <div id="color-screen" class="screen">
+            <div id="target-color-display" class="color-preview large">
+                <div id="countdown" class="countdown">3</div>
+            </div>
+            <h2 class="sub-text">Bu rengi aklında tut...</h2>
+        </div>
+
+        <!-- SCREEN 3: GUESS -->
+        <div id="guess-screen" class="screen">
+            <div id="guess-color-preview" class="color-preview large"></div>
+            <div class="controls-card">
+                <h3>Rengi Yeniden Oluştur</h3>
+                
+                <div class="slider-group">
+                    <div class="slider-labels">
+                        <label>Ton (Hue)</label>
+                        <span id="val-h">180</span>
+                    </div>
+                    <input type="range" id="slider-h" min="0" max="360" value="180">
+                </div>
+
+                <div class="slider-group">
+                    <div class="slider-labels">
+                        <label>Doygunluk</label>
+                        <span id="val-s">50%</span>
+                    </div>
+                    <input type="range" id="slider-s" min="0" max="100" value="50">
+                </div>
+
+                <div class="slider-group">
+                    <div class="slider-labels">
+                        <label>Parlaklık</label>
+                        <span id="val-l">50%</span>
+                    </div>
+                    <input type="range" id="slider-l" min="0" max="100" value="50">
+                </div>
+
+                <button id="btn-submit" class="btn primary full-width">Tahmin Et</button>
+            </div>
+        </div>
+
+        <!-- SCREEN 4: ROUND RESULT -->
+        <div id="round-result-screen" class="screen">
+            <div class="result-header">
+                <h2 id="round-title" style="font-size: 2rem; color: var(--text-primary); margin-bottom:0.5rem;">Turu Sen Kazandın!</h2>
+                <div id="round-subtitle" style="color:var(--text-muted); font-size:0.9rem;">+1 Puan eklendi</div>
+            </div>
+
+            <div class="comparison-row" style="margin-top: 2rem;">
+                <div class="color-box-container" id="self-score-card">
+                    <div class="color-box-label">Senin Tahminin</div>
+                    <div id="round-score-self" class="score-display" style="font-size: 3rem;">0%</div>
+                </div>
+                <div class="color-box-container" id="opponent-score-card">
+                    <div class="color-box-label">Rakip (Arkadaşın)</div>
+                    <div id="round-score-opponent" class="score-display" style="font-size: 3rem; color: var(--text-muted);">0%</div>
+                </div>
+            </div>
+
+            <div id="round-timer" class="sub-text" style="margin-top:auto;">Sonraki tur 5 saniye içinde başlıyor...</div>
+            <button id="btn-round-next" class="btn secondary hidden" style="margin-top: 1rem;">Sonraki Tur</button>
+        </div>
+
+        <!-- SCREEN 5: MATCH RESULT -->
+        <div id="match-result-screen" class="screen">
+            <div class="result-header" style="margin-top: auto; margin-bottom: auto;">
+                <h1 id="match-winner-text" style="font-size: 3rem; color: var(--primary); margin-bottom: 1rem;">Kazandın! 🏆</h1>
+                <p style="font-size: 1.2rem;">Harika bir hafızan var.</p>
+                
+                <div style="background:var(--surface); border:1px solid var(--border); padding: 1.5rem; border-radius:var(--radius-lg); margin-top:2rem; margin-bottom: 2rem;">
+                    <h3 style="color:var(--text-muted); font-size: 0.9rem; text-transform: uppercase; letter-spacing: 2px;">Maç Skoru</h3>
+                    <div style="font-size: 2.5rem; font-weight: 700; margin-top: 0.5rem;">
+                        Sen <span id="final-score-self" style="color:var(--accent);">0</span> - <span id="final-score-opponent" style="color:var(--text-muted);">0</span> Rakip
+                    </div>
+                </div>
+
+                <div class="actions">
+                    <button id="btn-share" class="btn primary">Sonucu Paylaş</button>
+                    <button id="btn-home-match" class="btn secondary outline">Ana Sayfaya Dön</button>
+                </div>
+            </div>
+        </div>
+
+        <!-- SCREEN 6: SOLO RESULT -->
+        <div id="solo-result-screen" class="screen">
+            <div class="result-header" style="margin-bottom: 1rem;">
+                <h2 style="font-size: 1.1rem; color: var(--text-muted); font-weight: 500; margin-bottom: 0px; text-transform: uppercase; letter-spacing: 2px;">Skorunuz</h2>
+                <div id="solo-final-score" class="score-display" style="font-size: 5rem; font-weight: 800; line-height: 1.1; color: var(--primary);">0%</div>
+            </div>
+
+            <div class="comparison-row">
+                <div class="color-box-container">
+                    <div class="color-box-label">Hedef Renk</div>
+                    <div id="solo-result-target" class="color-box" style="width:100%; height:80px; border-radius:var(--radius-sm); margin-top:0.5rem;"></div>
+                </div>
+                <div class="color-box-container">
+                    <div class="color-box-label">Senin Tahminin</div>
+                    <div id="solo-result-guess" class="color-box" style="width:100%; height:80px; border-radius:var(--radius-sm); margin-top:0.5rem;"></div>
+                </div>
+            </div>
+
+            <div class="stats-card">
+                <div class="stat-row">
+                    <div class="stat-header">
+                        <span class="stat-label">Ton Farkı</span>
+                        <span id="solo-diff-h" class="stat-value">+0</span>
+                    </div>
+                    <div class="stat-bar-container">
+                        <div id="solo-bar-h" class="stat-bar"></div>
+                    </div>
+                </div>
+                <div class="stat-row">
+                    <div class="stat-header">
+                        <span class="stat-label">Doygunluk Farkı</span>
+                        <span id="solo-diff-s" class="stat-value">+0%</span>
+                    </div>
+                    <div class="stat-bar-container">
+                        <div id="solo-bar-s" class="stat-bar"></div>
+                    </div>
+                </div>
+                <div class="stat-row">
+                    <div class="stat-header">
+                        <span class="stat-label">Parlaklık Farkı</span>
+                        <span id="solo-diff-l" class="stat-value">+0%</span>
+                    </div>
+                    <div class="stat-bar-container">
+                        <div id="solo-bar-l" class="stat-bar"></div>
+                    </div>
+                </div>
+            </div>
+
+            <div class="actions split" style="margin-top: 1rem;">
+                <button id="btn-solo-play-again" class="btn secondary">Tekrar Oyna</button>
+                <button id="btn-solo-home" class="btn secondary">Ana Sayfa</button>
+            </div>
+            
+            <button id="btn-solo-share" class="btn primary full-width" style="margin-top: 1rem;">Sonucu Paylaş</button>
+        </div>
+
+    </div>
+
+    <!-- FULL SCREEN WAITING OVERLAY -->
+    <div id="waiting-overlay" class="overlay hidden">
+        <div class="spinner"></div>
+        <h2 style="margin-top: 2rem;">Lütfen Bekleyin</h2>
+        <p id="waiting-subtext" style="color:var(--text-muted); margin-top: 0.5rem; text-align:center;">Karşı taraf bekleniyor...</p>
+    </div>
+
+    <!-- MODAL FOR SHARING (Fallback) -->
+    <div id="share-modal" class="modal hidden">
+        <div class="modal-content">
+            <h3>Skorunu Paylaş!</h3>
+            <p style="margin-bottom:0.5rem;">Aşağıdaki metni kopyalayıp yollayabilirsin:</p>
+            <textarea id="share-text" readonly></textarea>
+            <button id="btn-copy-modal" class="btn primary full-width">Kopyala</button>
+            <button id="btn-close-modal" class="btn secondary outline full-width" style="margin-top:0.5rem;">Kapat</button>
+        </div>
+    </div>
+
+    <!-- NOTIFICATION TOAST -->
+    <div id="notification" class="notification hidden"></div>
+
+    <script src="script.js?v=2024"></script>
+</body>
+</html>
