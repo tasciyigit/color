@@ -162,6 +162,16 @@ function init() {
         });
     });
 
+    // Copy Room Code Button
+    document.getElementById('btn-copy-room-code').addEventListener('click', () => {
+        const code = elems.lobbyCode.innerText;
+        navigator.clipboard.writeText(code).then(() => {
+            showNotification("Oda Kodu kopyalandı!");
+        }).catch(() => {
+            showNotification("Kopyalama başarısız oldu.");
+        });
+    });
+
     // Check URL params
     const urlParams = new URLSearchParams(window.location.search);
     const roomFromUrl = urlParams.get('oda');
@@ -212,11 +222,18 @@ function goHome() {
     clearInterval(gameTimer);
     clearInterval(resultTimer);
     clearTimeout(roundTimeoutTimer);
+    clearInterval(guessVisTimer);
     cleanupPeer();
     
     window.history.replaceState({}, '', window.location.pathname);
     gameState.isMultiplayer = false;
     elems.waitingOverlay.classList.add('hidden');
+    
+    // Fix: "Bekleniyor" yazısının kalması sorunu
+    const timerDisp = document.getElementById('guess-timer-display');
+    timerDisp.classList.add('hidden');
+    timerDisp.innerText = '00:20';
+    timerDisp.style.color = 'var(--text-muted)';
     
     switchScreen('home');
 }
@@ -274,6 +291,11 @@ function createRoom() {
         else showNotification("Hata oluştu: " + err.type);
         goHome();
     });
+
+    peer.on('disconnected', () => {
+        console.log("Bağlantı koptu. WhatsApp vs sonrası otomatik yenileniyor...");
+        if (!peer.destroyed) peer.reconnect();
+    });
 }
 
 function handleHostData(peerId, data) {
@@ -291,6 +313,7 @@ function handleHostData(peerId, data) {
     if (data.type === 'GUEST_GUESS') {
         if(gameState.players[peerId]) {
             gameState.players[peerId].currentAcc = data.payload.score;
+            gameState.players[peerId].breakdown = data.payload.breakdown || null;
             checkRoundReady(false);
         }
     }
@@ -353,6 +376,10 @@ function joinRoom(code) {
         else showNotification("Bağlantı hatası: " + err.type);
         goHome();
     });
+
+    peer.on('disconnected', () => {
+        if (!peer.destroyed) peer.reconnect();
+    });
 }
 
 function handleGuestData(data) {
@@ -405,6 +432,16 @@ function renderLobbyPlayers() {
         elems.lobbyPlayersList.appendChild(li);
     });
 }
+
+// OS Background Resume Fix
+document.addEventListener('visibilitychange', () => {
+    if (document.visibilityState === 'visible') {
+        if (peer && peer.disconnected && !peer.destroyed) {
+            console.log("Ekran geri geldi, odaya tekrar bağlanılıyor...");
+            peer.reconnect();
+        }
+    }
+});
 
 // ------ GAME LOGIC ------
 
@@ -529,9 +566,13 @@ function submitGuess() {
         return;
     }
 
+    // Store breakdown for leaderboard display
+    const guessBreakdown = gameState.gameMode === 'speedKahoot' ? { base: accuracy, bonus: timeBonus } : null;
+
     // Multiplayer Logic
     if (isHost) {
         gameState.players[myPeerId].currentAcc = finalScore;
+        gameState.players[myPeerId].breakdown = guessBreakdown;
         clearInterval(guessVisTimer);
         document.getElementById('guess-timer-display').innerText = "Bekleniyor...";
         showOverlay("Diğer oyuncuların tahmini bekleniyor...");
@@ -540,7 +581,7 @@ function submitGuess() {
         clearInterval(guessVisTimer);
         document.getElementById('guess-timer-display').innerText = "Bekleniyor...";
         showOverlay("Diğer oyuncular bekleniyor...");
-        connections['host'].send({ type: 'GUEST_GUESS', payload: { score: finalScore } });
+        connections['host'].send({ type: 'GUEST_GUESS', payload: { score: finalScore, breakdown: guessBreakdown } });
     }
 }
 
@@ -594,7 +635,8 @@ function checkRoundReady(forceComplete = false) {
                 id: id,
                 name: gameState.players[id].name,
                 roundAcc: gameState.players[id].currentAcc,
-                totalScore: gameState.players[id].score
+                totalScore: gameState.players[id].score,
+                breakdown: gameState.players[id].breakdown || null
             }
         });
         
@@ -633,11 +675,30 @@ function renderLeaderboard(containerId, list, isMatchResult) {
         
         const rankIdx = index + 1;
         
+        // Build round accuracy text with breakdown for speedKahoot
+        let roundAccText = '';
+        if (!isMatchResult) {
+            if (item.breakdown && gameState.gameMode === 'speedKahoot') {
+                roundAccText = `Turu: ${item.breakdown.base}% + ${item.breakdown.bonus} süre = ${item.roundAcc}%`;
+            } else {
+                roundAccText = 'Turu: ' + item.roundAcc + '%';
+            }
+        } else {
+            // Match result: son turda kaç puan yaptığını göster
+            if (item.roundAcc !== undefined && item.roundAcc !== null) {
+                if (item.breakdown && gameState.gameMode === 'speedKahoot') {
+                    roundAccText = `Son tur: ${item.breakdown.base}% + ${item.breakdown.bonus} süre = ${item.roundAcc}%`;
+                } else {
+                    roundAccText = 'Son tur: ' + item.roundAcc + '%';
+                }
+            }
+        }
+        
         div.innerHTML = `
             <div class="rank">#${rankIdx}</div>
             <div class="player-info">
                 <div class="name">${item.name}</div>
-                <div class="round-acc">${isMatchResult ? '' : ('Turu: ' + item.roundAcc + '%')}</div>
+                <div class="round-acc">${roundAccText}</div>
             </div>
             <div style="display:flex; flex-direction:column; align-items:flex-end;">
                 <span class="score-label">${gameState.gameMode === 'classic' ? 'Puan' : 'Toplam'}</span>
@@ -677,21 +738,40 @@ function handleMatchResult(payload) {
     
     renderLeaderboard('final-leaderboard-container', payload.leaderboard, true);
     
-    // Check if I won
-    const winnerId = payload.leaderboard[0].id; // The sorted first
-    if(winnerId === myPeerId) {
-        elems.matchWinnerText.innerText = "Şampiyon Sensin! 🏆";
-        elems.matchWinnerText.style.color = "var(--win)";
+    // Check for tie: are top players sharing the same totalScore?
+    const topScore = payload.leaderboard[0].totalScore;
+    const topPlayers = payload.leaderboard.filter(p => p.totalScore === topScore);
+    const isTie = topPlayers.length > 1;
+    
+    if (isTie) {
+        // Check if I'm among the tied winners
+        const imInTie = topPlayers.some(p => p.id === myPeerId);
+        if (imInTie) {
+            elems.matchWinnerText.innerText = "Berabere! 🤝";
+            elems.matchWinnerText.style.color = "var(--accent)";
+        } else {
+            const tiedNames = topPlayers.map(p => p.name).join(' & ');
+            elems.matchWinnerText.innerText = `Berabere: ${tiedNames} 🤝`;
+            elems.matchWinnerText.style.color = "var(--text-primary)";
+        }
     } else {
-        elems.matchWinnerText.innerText = `Kazanan: ${payload.leaderboard[0].name} 👑`;
-        elems.matchWinnerText.style.color = "var(--text-primary)";
+        const winnerId = payload.leaderboard[0].id;
+        if (winnerId === myPeerId) {
+            elems.matchWinnerText.innerText = "Şampiyon Sensin! 🏆";
+            elems.matchWinnerText.style.color = "var(--win)";
+        } else {
+            elems.matchWinnerText.innerText = `Kazanan: ${payload.leaderboard[0].name} 👑`;
+            elems.matchWinnerText.style.color = "var(--text-primary)";
+        }
     }
 
     // Save for sharing
+    const winnerId = payload.leaderboard[0].id;
     window.matchShareData = { 
-        iWon: winnerId === myPeerId, 
+        iWon: !isTie && winnerId === myPeerId,
+        isTie: isTie,
         myScore: payload.leaderboard.find(x=>x.id === myPeerId).totalScore, 
-        winnerName: payload.leaderboard[0].name,
+        winnerName: isTie ? 'Berabere' : payload.leaderboard[0].name,
         limit: payload.limit 
     };
 }
@@ -770,7 +850,10 @@ function hideOverlay() { elems.waitingOverlay.classList.add('hidden'); }
 
 function shareResult() {
     const data = window.matchShareData || {};
-    const textStatus = data.iWon ? "Şampiyon oldum!" : `${data.winnerName} kazandı ama rekabetçiydim.`;
+    let textStatus;
+    if (data.isTie) textStatus = "Berabere kaldık!";
+    else if (data.iWon) textStatus = "Şampiyon oldum!";
+    else textStatus = `${data.winnerName} kazandı ama rekabetçiydim.`;
     const base = window.location.origin + window.location.pathname;
     let text = `🎨 Renk Hafıza Oyunu\n\nEkiple oynadık ve ${textStatus}\nToplam Skorum: ${data.myScore}\n\nSen de oyna:\n${base}`;
 
